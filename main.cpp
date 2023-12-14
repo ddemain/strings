@@ -6,10 +6,10 @@
 
 using namespace std;
 
-// alphabet is chars (32:127, 13, 10); long = 8 bytes;
-// char(0)=NUL as delim (std::strings are not null-terminated);
-constexpr int pk = 257, pmod = 1e9+7;
+// the alphabet is chars {32:127, 13, 10}; the delimiter is char(0)=NUL (std::strings are not NT);
 constexpr char alphabet[] = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\r\n";
+// chars are by default ascii-encoded 1-byte values;
+constexpr int pk = 257;
 
 //class d/d
 
@@ -76,37 +76,36 @@ Match RabinKarp(const string& base, const string& pattern) { //computes in O(m+n
     vector<Hit> hits;
     int n = (int) base.size();
     int m = (int) pattern.size();
-    long int hp = 0, hb = 0, fmult = 1;
-    for (int i = 0; i < m; ++i) { // m times, prep
-        hp = (hp + pattern[i] * fmult) % pmod; //здесь обновляется хэш паттерн-строки размера m
-        hb = (hb + base[i] * fmult) % pmod; //здесь обновляется хэш подстроки размера m
-        fmult = (fmult * pk) % pmod; // здесь обновляется коэффициент при i(+1) символе
-        cout << "cf: " << i << " " << hp << " " << hb << " " << fmult << "\n";
-    } //fmult == pk^m
+    long long int hp = 0, hb = 0, fmult = 1;
+    for (int i = 0; i < m; ++i) { // O(m)
+        hp = hp + pattern[i] * fmult; // += char*pk^i
+        hb = hb + base[i] * fmult; // += char*pk^i
+        fmult = fmult * pk; // pk^(i+1)
+    } //fmult == pk^patternSize
     for (int i = 0; i < n - m; ++i) { // n-m times
-        if (hb == hp) { // NB: O(1)
-            hits.emplace_back(i,m);
-        }
-        hb = (hb - base[i] + fmult * base[i + m]) / pk % pmod;
-        cout << "after move " << i+1 << ": " << hb << "\n";
-        // быстрый пересчет хэша на (i+1:i+m+1)
+        if (hb == hp) { hits.emplace_back(i, m); } // O(1)
+        hb = (hb - base[i] + base[i + m] * fmult) / pk;
+        // [strin]g = s*pk^0 + t*pk^1 + ... + n*pk^(m-1) ->
+        // [0trin]g = 0 + t*pk^1 + ... + n*pk^(m-1) ->
+        // [0tring] -> 0 + t*pk^1 + ... + n*pk^(m-1) + g*pk^m ->
+        // [tring] -> t*pk^0 + ... n*pk(m-2) + g^pk(m-1)
     }
     return {base, pattern, hits};
 }
 
-vector<int> prefixFunction (const string& s) {
-    int n = (int) s.size();
-    vector<int> prefixArray (n);
-    for (int i = 1; i < n; ++i) {
-        int j = prefixArray[i-1];
-        while (j > 0 && s[i] != s[j])
-            j = prefixArray[j-1];
-        if (s[i] == s[j]) ++j;
-        prefixArray[i] = j;
-    }
-    return prefixArray;
-}
-
+//vector<int> prefixFunction (const string& s) {
+//    int n = (int) s.size();
+//    vector<int> prefixArray (n);
+//    for (int i = 1; i < n; ++i) {
+//        int j = prefixArray[i-1];
+//        while (j > 0 && s[i] != s[j])
+//            j = prefixArray[j-1];
+//        if (s[i] == s[j]) ++j;
+//        prefixArray[i] = j;
+//    }
+//    return prefixArray;
+//}
+//
 //vector<vector<int>> transitionTable(string pattern) {
 //    int n = (int) pattern.size();
 //    vector<int> prefixArray(prefixFunction(pattern));
@@ -131,22 +130,21 @@ vector<int> prefixFunction (const string& s) {
 
 Match KnuthMorrisPratt(const string& base, const string& pattern) {
     vector<Hit> hits;
-    int patternSize = (int) pattern.size();
+    int m = (int) pattern.size();
 
-    string comp = pattern+char(0)+base; //composite string; NUL to restrict the prefix
-    int compSize = (int) comp.size();
-    vector<int> prefixArray (compSize);
+    string s = pattern + char(0) + base; //composite string; NUL to restrict the prefix
+    int l = (int) s.size();
+    vector<int> prefix (l);
 
-    for (int i = 1; i < compSize; ++i) { //n+m times
-        int j = prefixArray[i-1];
-        while (j > 0 && comp[i] != comp[j])
-            j = prefixArray[j-1];
-        if (comp[i] == comp[j]) ++j;
-        prefixArray[i] = j;
+    for (int i = 1; i < l; ++i) { //n+m times
+        int j = prefix[i-1];
+        while (j > 0 && s[i] != s[j])
+            j = prefix[j-1];
+        if (s[i] == s[j]) ++j;
+        prefix[i] = j;
 
-        if (prefixArray[i] == patternSize) {
-            int baseIndex = i-2*patternSize;
-            hits.emplace_back(baseIndex, patternSize);
+        if (prefix[i] == m) {
+            hits.emplace_back(i - 2 * m, m);
         }
     }
     return {base, pattern, hits};
@@ -171,16 +169,15 @@ int main() {
 //               "Mauris ultrices vel sem vel laoreet. Phasellus lacus nisl, tincidunt vel libero et, semper pharetra libero. Fusce augue diam, tristique ac blandit quis, finibus vel mi. Curabitur at dolor pretium ex ornare posuere. Mauris egestas eros neque, sit amet tempor sem ornare sed. Pellentesque turpis mi, tincidunt ut efficitur sed, feugiat sit amet magna. Maecenas quam lectus, iaculis nec elit non, vehicula convallis tortor. Aliquam viverra efficitur molestie. Fusce pulvinar ac odio sit amet dignissim. In vitae risus feugiat, convallis turpis a, ullamcorper leo. Donec ornare leo justo, ut interdum neque sodales sed. Donec elit nisi, congue eu metus quis, condimentum egestas orci. Nam eget sem nibh.\n"
 //               "Nullam vitae enim ut odio ornare maximus. Aliquam malesuada felis ex, sed tristique diam egestas vel. Ut ac egestas elit, sed condimentum est. Suspendisse potenti. Fusce feugiat dictum lacus at lobortis. Sed consectetur nunc id pretium vestibulum. Morbi viverra mauris et dapibus mattis. Donec ultricies augue tincidunt mauris dignissim, ac commodo mauris suscipitque.";
 //    string y = "que"
-    string x = "Sampletestsampletestingsample.";
-    string y = "amp";
+    string x = "Sampletextsamplestringsample.";
+    string y = "ampl";
     Match naive = Naive(x, y);
     Match rk = RabinKarp(x, y);
-    Match rk4 = RabinKarp(x, "ample");
 //    Match fa = FiniteAutomaton(s, "ed");
     Match kmp = KnuthMorrisPratt(x, y);
     Match bm = BoyerMoore(x, y);
     cout << "Naive:\n" << naive << "\n";
-    cout << "Rabin-Karp:\n" << rk << rk4 << "\n";
+    cout << "Rabin-Karp:\n" << rk << "\n";
     cout << "Knuth-Morris-Pratt:\n" << kmp << "\n";
     return 0;
 }
